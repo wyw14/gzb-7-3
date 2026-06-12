@@ -48,6 +48,10 @@
                 <el-icon><Wallet /></el-icon>
                 {{ isOwner ? '这是您发布的乐器' : instrument.status === 'available' ? '申请借用' : '暂不可借' }}
               </el-button>
+              <el-button size="large" :disabled="isOwner" @click="showAudition = true">
+                <el-icon><VideoPlay /></el-icon>
+                预约试奏
+              </el-button>
               <el-button size="large" :disabled="isOwner" @click="showInvite = true">
                 <el-icon><ChatDotRound /></el-icon>
                 邀约主人练琴
@@ -167,6 +171,35 @@
         <el-button type="primary" :loading="submitting" @click="submitInvite">发送邀约</el-button>
       </template>
     </el-dialog>
+    
+    <el-dialog v-model="showAudition" title="预约试奏" width="500px">
+      <el-form :model="auditionForm" label-width="100px">
+        <el-form-item label="试奏乐器">
+          <span>{{ instrument.name }}</span>
+        </el-form-item>
+        <el-form-item label="想试曲目">
+          <el-input v-model="auditionForm.piece" placeholder="如：想试奏贝多芬奏鸣曲" />
+        </el-form-item>
+        <el-form-item label="可到场时间">
+          <el-date-picker
+            v-model="auditionForm.preferredTime"
+            type="datetime"
+            placeholder="选择您方便的时间"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="地点偏好">
+          <el-input v-model="auditionForm.locationPreference" type="textarea" :rows="2" placeholder="如：希望在您家附近，或音乐教室" />
+        </el-form-item>
+        <el-form-item label="备注留言">
+          <el-input v-model="auditionForm.message" type="textarea" :rows="3" placeholder="想对主人说的话..." />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showAudition = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitAudition">提交预约</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -174,9 +207,9 @@
 import { ref, reactive, computed, onMounted, inject } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { instrumentApi, borrowApi, invitationApi, reviewApi } from '../api'
+import { instrumentApi, borrowApi, invitationApi, auditionApi, reviewApi } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Goods, Medal, Location, Wallet, ChatDotRound, Document, User, Star, ChatLineSquare } from '@element-plus/icons-vue'
+import { Goods, Medal, Location, Wallet, ChatDotRound, Document, User, Star, ChatLineSquare, VideoPlay } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -187,6 +220,7 @@ const instrument = ref(null)
 const ownerReviews = ref([])
 const showBorrow = ref(false)
 const showInvite = ref(false)
+const showAudition = ref(false)
 const submitting = ref(false)
 
 const borrowForm = reactive({
@@ -199,6 +233,13 @@ const inviteForm = reactive({
   piece: '',
   meetTime: null,
   location: '',
+  message: ''
+})
+
+const auditionForm = reactive({
+  piece: '',
+  preferredTime: null,
+  locationPreference: '',
   message: ''
 })
 
@@ -283,6 +324,38 @@ const submitInvite = async () => {
     })
     ElMessage.success('邀约已发送，期待好消息！')
     showInvite.value = false
+    router.push('/messages')
+  } catch (e) {
+    ElMessage.error('提交失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
+const submitAudition = async () => {
+  if (!userStore.isLoggedIn) {
+    showAudition.value = false
+    requireLogin()
+    return
+  }
+  if (!auditionForm.piece || !auditionForm.preferredTime) {
+    ElMessage.warning('请填写想试曲目和可到场时间')
+    return
+  }
+  submitting.value = true
+  try {
+    await auditionApi.create({
+      requesterId: userStore.userId,
+      ownerId: instrument.value.ownerId,
+      instrumentId: instrument.value.id,
+      instrumentName: instrument.value.name,
+      piece: auditionForm.piece,
+      preferredTime: new Date(auditionForm.preferredTime).toLocaleString('zh-CN', { hour12: false }),
+      locationPreference: auditionForm.locationPreference,
+      message: auditionForm.message
+    })
+    ElMessage.success('试奏预约已发送，请等待主人确认！')
+    showAudition.value = false
     router.push('/messages')
   } catch (e) {
     ElMessage.error('提交失败')

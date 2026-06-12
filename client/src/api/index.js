@@ -50,6 +50,13 @@ export const invitationApi = {
   update: (id, data) => api.put(`/invitations/${id}`, data)
 }
 
+export const auditionApi = {
+  list: (params) => api.get('/auditions', { params }),
+  listByUser: (userId) => api.get(`/auditions/user/${userId}`),
+  create: (data) => api.post('/auditions', data),
+  update: (id, data) => api.put(`/auditions/${id}`, data)
+}
+
 export const checkinApi = {
   list: (params) => api.get('/checkins', { params }),
   stats: (userId) => api.get(`/checkins/stats/${userId}`),

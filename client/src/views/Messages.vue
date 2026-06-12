@@ -113,6 +113,87 @@
         
         <el-tab-pane>
           <template #label>
+            <el-icon><VideoPlay /></el-icon>
+            试奏预约
+            <el-badge v-if="pendingAuditionsAsOwner.length" :value="pendingAuditionsAsOwner.length" class="tab-badge" />
+          </template>
+          
+          <div class="section">
+            <h3>收到的试奏预约（作为主人）</h3>
+            <div v-if="auditionsAsOwner.length" class="msg-list">
+              <div v-for="aud in auditionsAsOwner" :key="aud.id" class="msg-item card">
+                <div class="msg-avatar">
+                  <img :src="aud.requester?.avatar" class="avatar-md" />
+                </div>
+                <div class="msg-content">
+                  <div class="msg-title">
+                    <b>{{ aud.requester?.username }}</b> 预约试奏您的
+                    <router-link :to="`/instruments/${aud.instrumentId}`">{{ aud.instrument?.name }}</router-link>
+                    <span class="badge" :class="statusClass(aud.status)">{{ statusText(aud.status) }}</span>
+                  </div>
+                  <div class="msg-meta">
+                    <span><el-icon><Notebook /></el-icon> {{ aud.piece || '待定' }}</span>
+                    <span><el-icon><Calendar /></el-icon> {{ aud.preferredTime }}</span>
+                    <span v-if="aud.locationPreference"><el-icon><Location /></el-icon> {{ aud.locationPreference }}</span>
+                  </div>
+                  <p class="msg-body" v-if="aud.message">留言：{{ aud.message }}</p>
+                  <div class="msg-actions" v-if="aud.status === 'pending'">
+                    <el-button type="success" size="small" @click="updateAudition(aud, 'accepted')">
+                      <el-icon><CircleCheck /></el-icon>
+                      接受预约
+                    </el-button>
+                    <el-button type="danger" size="small" @click="updateAudition(aud, 'rejected')">
+                      <el-icon><CircleClose /></el-icon>
+                      拒绝
+                    </el-button>
+                  </div>
+                  <div class="msg-actions" v-if="aud.status === 'accepted'">
+                    <el-button type="primary" size="small" @click="updateAudition(aud, 'completed')">
+                      <el-icon><CircleCheck /></el-icon>
+                      标记已完成
+                    </el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty-state small"><el-icon><VideoPlay /></el-icon><p>暂无试奏预约</p></div>
+          </div>
+          
+          <div class="section">
+            <h3>我的试奏预约（作为申请人）</h3>
+            <div v-if="auditionsAsRequester.length" class="msg-list">
+              <div v-for="aud in auditionsAsRequester" :key="aud.id" class="msg-item card">
+                <div class="msg-avatar">
+                  <img :src="aud.instrument?.image" class="inst-thumb" />
+                </div>
+                <div class="msg-content">
+                  <div class="msg-title">
+                    您预约试奏
+                    <router-link :to="`/instruments/${aud.instrumentId}`">{{ aud.instrument?.name }}</router-link>
+                    （主人：{{ aud.owner?.username }}）
+                    <span class="badge" :class="statusClass(aud.status)">{{ statusText(aud.status) }}</span>
+                  </div>
+                  <div class="msg-meta">
+                    <span><el-icon><Notebook /></el-icon> {{ aud.piece || '待定' }}</span>
+                    <span><el-icon><Calendar /></el-icon> {{ aud.preferredTime }}</span>
+                    <span v-if="aud.locationPreference"><el-icon><Location /></el-icon> {{ aud.locationPreference }}</span>
+                  </div>
+                  <p class="msg-body" v-if="aud.message">留言：{{ aud.message }}</p>
+                  <div class="msg-actions" v-if="aud.status === 'accepted'">
+                    <el-tag type="success" size="small">主人已接受，请准时赴约</el-tag>
+                  </div>
+                  <div class="msg-actions" v-if="aud.status === 'pending'">
+                    <el-tag type="warning" size="small">等待主人确认</el-tag>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty-state small"><el-icon><VideoPlay /></el-icon><p>暂无试奏预约记录</p></div>
+          </div>
+        </el-tab-pane>
+        
+        <el-tab-pane>
+          <template #label>
             <el-icon><User /></el-icon>
             邀约消息
             <el-badge v-if="pendingInvitationsAsInvitee.length" :value="pendingInvitationsAsInvitee.length" class="tab-badge" />
@@ -248,15 +329,16 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useUserStore } from '../stores/user'
-import { borrowApi, invitationApi, reviewApi } from '../api'
+import { borrowApi, invitationApi, auditionApi, reviewApi } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Goods, User, Calendar, Wallet, CircleCheck, CircleClose, MagicStick, Notebook, Location, Edit } from '@element-plus/icons-vue'
+import { Goods, User, Calendar, Wallet, CircleCheck, CircleClose, MagicStick, Notebook, Location, Edit, VideoPlay } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
 
 const activeTab = ref('0')
 const borrows = ref([])
 const invitations = ref([])
+const auditions = ref([])
 const showReview = ref(false)
 const submitting = ref(false)
 
@@ -283,6 +365,10 @@ const statusMap = {
   accepted: { text: '已接受', class: 'badge-success' },
   completed: { text: '已完成', class: 'badge-success' }
 }
+
+const auditionsAsOwner = computed(() => auditions.value.filter(a => a.ownerId === userStore.userId))
+const auditionsAsRequester = computed(() => auditions.value.filter(a => a.requesterId === userStore.userId))
+const pendingAuditionsAsOwner = computed(() => auditionsAsOwner.value.filter(a => a.status === 'pending'))
 
 const statusText = (s) => statusMap[s]?.text || s
 const statusClass = (s) => statusMap[s]?.class || 'badge-primary'
@@ -316,6 +402,12 @@ const loadAll = async () => {
   
   try {
     invitations.value = await invitationApi.listByUser(userStore.userId)
+  } catch (e) {
+    console.error(e)
+  }
+  
+  try {
+    auditions.value = await auditionApi.listByUser(userStore.userId)
   } catch (e) {
     console.error(e)
   }
@@ -361,6 +453,29 @@ const updateInvitation = async (inv, status) => {
   try {
     await invitationApi.update(inv.id, { status })
     ElMessage.success(status === 'accepted' ? '已接受邀约，一起开心练琴吧~' : '已婉拒邀约')
+    await loadAll()
+  } catch (e) {
+    ElMessage.error('操作失败')
+  }
+}
+
+const updateAudition = async (aud, status) => {
+  try {
+    const actionText = status === 'accepted' ? '接受' : status === 'rejected' ? '拒绝' : '完成'
+    await ElMessageBox.confirm(`确认${actionText}该试奏预约？`, '提示', {
+      type: status === 'rejected' ? 'warning' : 'success'
+    })
+  } catch { return }
+  
+  try {
+    await auditionApi.update(aud.id, { status })
+    if (status === 'accepted') {
+      ElMessage.success('已接受试奏预约')
+    } else if (status === 'rejected') {
+      ElMessage.success('已拒绝试奏预约')
+    } else {
+      ElMessage.success('已标记为完成')
+    }
     await loadAll()
   } catch (e) {
     ElMessage.error('操作失败')
