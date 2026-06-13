@@ -48,9 +48,9 @@
                 <el-icon><Wallet /></el-icon>
                 {{ isOwner ? '这是您发布的乐器' : instrument.status === 'available' ? '申请借用' : '暂不可借' }}
               </el-button>
-              <el-button size="large" :disabled="isOwner" @click="showAudition = true">
+              <el-button size="large" :disabled="instrument.status !== 'available' || isOwner" @click="showAudition = true">
                 <el-icon><VideoPlay /></el-icon>
-                预约试奏
+                {{ isOwner ? '这是您发布的乐器' : instrument.status === 'available' ? '预约试奏' : '乐器借用中' }}
               </el-button>
               <el-button size="large" :disabled="isOwner" @click="showInvite = true">
                 <el-icon><ChatDotRound /></el-icon>
@@ -358,7 +358,11 @@ const submitAudition = async () => {
     showAudition.value = false
     router.push('/messages')
   } catch (e) {
-    ElMessage.error('提交失败')
+    if (e.response?.data?.error) {
+      ElMessage.warning(e.response.data.error)
+    } else {
+      ElMessage.error('提交失败')
+    }
   } finally {
     submitting.value = false
   }

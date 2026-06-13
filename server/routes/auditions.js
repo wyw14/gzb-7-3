@@ -61,6 +61,22 @@ router.get('/user/:userId', (req, res) => {
 
 router.post('/', (req, res) => {
   const auditions = readJSON('auditions.json', []);
+  const instruments = readJSON('instruments.json', []);
+  
+  const { instrumentId } = req.body;
+  
+  if (!instrumentId) {
+    return res.status(400).json({ error: '缺少乐器ID' });
+  }
+  
+  const instrument = instruments.find(i => i.id === instrumentId);
+  if (!instrument) {
+    return res.status(404).json({ error: '乐器不存在' });
+  }
+  
+  if (instrument.status !== 'available') {
+    return res.status(400).json({ error: '该乐器当前借用中，暂不可预约试奏' });
+  }
   
   const newAudition = {
     id: 'aud' + uuidv4().slice(0, 8),
